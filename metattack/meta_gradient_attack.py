@@ -314,7 +314,7 @@ class GNNMetaApprox(GNNAttack):
             labels_gather = tf.gather(self.labels_onehot, self.idx_labeled)
             logits_gather = tf.gather(self.logits, self.idx_labeled)
             self.classification_loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits_v2(labels=labels_gather,
-                                                                                  logits=logits_gather))
+                                                                                                 logits=logits_gather))
             epsilon = 1e-8
             if self.dtype == tf.float16:
                 epsilon = 1e-4  # improve numerical stability for half precision
@@ -738,7 +738,8 @@ class GCNSparse:
                 self.weights.append(weight)
                 self.biases.append(bias)
                 previous_size = layer_size
-            weight_final = tf.get_variable(f"W_{len(hidden_sizes) + 1}", shape=[previous_size, self.K], dtype=tf.float32,
+            weight_final = tf.get_variable(f"W_{len(hidden_sizes) + 1}", shape=[previous_size, self.K],
+                                           dtype=tf.float32,
                                            initializer=w_init())
             bias_final = tf.get_variable(f"b_{len(hidden_sizes) + 1}", shape=[self.K], dtype=tf.float32,
                                          initializer=w_init())
