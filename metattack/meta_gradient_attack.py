@@ -342,7 +342,7 @@ class GNNMetaApprox(GNNAttack):
             logits_labeled = tf.gather(self.logits, self.idx_labeled)
             labels_train = tf.gather(self.labels_onehot, self.idx_labeled)
             logits_unlabeled = tf.gather(self.logits, self.idx_unlabeled)
-            labels_selftrain = tf.gather(self.logits, self.idx_unlabeled)
+            labels_selftrain = tf.gather(self.labels_onehot, self.idx_unlabeled)
 
             loss_labeled = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits_v2(logits=logits_labeled,
                                                                                      labels=labels_train))
