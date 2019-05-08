@@ -1,5 +1,9 @@
 # Adversarial Attacks on Graph Neural Networks via Meta Learning
 
+<p align="center">
+<img src="https://www.kdd.in.tum.de/fileadmin/w00bxq/www/gnn-meta-attack/figure.png" width="400">
+</p>
+
 Implementation of the paper:   
 **[Adversarial Attacks on Graph Neural Networks via Meta Learning](https://openreview.net/forum?id=Bylnx209YX&noteId=r1xNHe2tAQ)**
 
@@ -25,11 +29,6 @@ Technical University of Munich
 ## Run the code
  
  To try our code, you can use the IPython notebook `demo.ipynb`.
-
-## Example output
-<p align="center">
-<img src="https://www.kdd.in.tum.de/fileadmin/w00bxq/www/gnn-meta-attack/figure.png" width="400">
-</p>
  
 ## Contact
 Please contact zuegnerd@in.tum.de in case you have any questions.
