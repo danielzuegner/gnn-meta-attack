@@ -28,7 +28,7 @@ Technical University of Munich
 
 ## Example output
 <p align="center">
-<img src="https://www.kdd.in.tum.de/fileadmin/w00bxq/www/gnn-meta-attack/example_meta.svg" width="400">
+<img src="https://www.kdd.in.tum.de/fileadmin/w00bxq/www/gnn-meta-attack/figure.png" width="400">
 </p>
  
 ## Contact
