@@ -278,7 +278,7 @@ class GNNMetaApprox(GNNAttack):
         self.adjacency_update = None
         self.ll_ratio = None
 
-    def build(self, with_relu=False, learning_rate=1e-2):
+    def build(self, with_relu=False, learning_rate=1e-2, with_bias=False):
         """
         Construct the model and create the weight variables.
         Parameters
@@ -287,7 +287,8 @@ class GNNMetaApprox(GNNAttack):
             Whether to use the ReLU activation in the hidden layers
         learning_rate: float
             Learning rate for training.
-
+        with_bias: bool
+            Whether to use the bias terms during the attack.
         """
         with self.graph.as_default():
 
@@ -296,7 +297,7 @@ class GNNMetaApprox(GNNAttack):
 
             hidden = self.attributes
             for ix, w in enumerate(weights):
-                b = bias[ix]
+                b = bias[ix]*float(with_bias)
                 if ix == 0 and self.sparse_attributes:
                     if self.dtype != tf.float32:  # sparse matmul is unfortunately not implemented for float16
                         hidden = self.adj_norm @ tf.cast(tf.sparse_tensor_dense_matmul(tf.cast(hidden, tf.float32),
@@ -485,7 +486,7 @@ class GNNMeta(GNNAttack):
         self.combined_update = None
         self.ll_ratio = None
 
-    def build(self, with_relu=False, learning_rate=0.1, momentum=0.9):
+    def build(self, with_relu=False, learning_rate=0.1, momentum=0.9, with_bias=False):
         """
         Construct the model and create the weight variables.
 
@@ -499,6 +500,9 @@ class GNNMeta(GNNAttack):
 
         momentum: float
             Momentum term for SGD with momentum.
+
+        with_bias: bool
+            Whether to use the bias terms during the attack.
 
         """
 
@@ -514,7 +518,7 @@ class GNNMeta(GNNAttack):
 
                     hidden = self.attributes
                     for ix, w in enumerate(current_weights):
-                        b = current_biases[ix]
+                        b = current_biases[ix] * float(with_bias)
                         if ix == 0 and self.sparse_attributes:
                             hidden = self.adj_norm @ tf.sparse_tensor_dense_matmul(hidden, w) + b
                         else:
@@ -550,7 +554,7 @@ class GNNMeta(GNNAttack):
 
             final_output = self.attributes
             for ix, w in enumerate(final_weights):
-                b = final_bias[ix]
+                b = final_bias[ix] * float(with_bias)
                 if ix == 0 and self.sparse_attributes:
                     final_output = self.adj_norm @ tf.sparse_tensor_dense_matmul(final_output, w) + b
                 else:
@@ -672,7 +676,16 @@ class GNNMeta(GNNAttack):
                 self.session.run(self.adjacency_meta_update,
                                  {self.idx_attack: idx_attack, self.idx_labeled: idx_labeled})
 
+                
+def sparse_dropout(x, keep_prob, noise_shape):
+    """Dropout for sparse tensors."""
+    random_tensor = keep_prob
+    random_tensor += tf.random_uniform(noise_shape)
+    dropout_mask = tf.cast(tf.floor(random_tensor), dtype=tf.bool)
+    pre_out = tf.sparse_retain(x, dropout_mask)
+    return pre_out * (1./keep_prob)
 
+                
 class GCNSparse:
     """
     GCN implementation with a sparse adjacency matrix and possibly sparse attribute matrices. Note that this becomes
@@ -680,7 +693,8 @@ class GCNSparse:
     (see build()).
     """
 
-    def __init__(self, adjacency_matrix, attribute_matrix, labels_onehot, hidden_sizes, gpu_id=None):
+    def __init__(self, adjacency_matrix, attribute_matrix, labels_onehot, hidden_sizes, gpu_id=None,
+                 weight_decay=5e-4, learning_rate=0.01, dropout=0.5):
         """
         Parameters
         ----------
@@ -700,6 +714,15 @@ class GCNSparse:
         gpu_id: int or None
             GPU to use. None means CPU-only
 
+        weight_decay: float, default 5e-4
+            L2 regularization for the first layer only (matching the original implementation of GCN)
+
+        learning_rate: float, default 0.01
+            The learning rate used for training.
+
+        dropout: float, default 0.5
+            Dropout used for training.
+
         """
         if not sp.issparse(adjacency_matrix):
             raise ValueError("Adjacency matrix should be a sparse matrix.")
@@ -708,8 +731,14 @@ class GCNSparse:
         self.K = labels_onehot.shape[1]
         self.hidden_sizes = hidden_sizes
         self.graph = tf.Graph()
+        
+        self.learning_rate = learning_rate
+        self.dropout = dropout
+        self.weight_decay = weight_decay
 
         with self.graph.as_default():
+            self.training = tf.placeholder_with_default(False, shape=())
+
             self.idx = tf.placeholder(tf.int32, shape=[None])
             self.labels_onehot = labels_onehot
 
@@ -722,8 +751,14 @@ class GCNSparse:
             if self.sparse_attributes:
                 self.attributes = tf.SparseTensor(np.array(attribute_matrix.nonzero()).T,
                                                   attribute_matrix[attribute_matrix.nonzero()].A1, [self.N, self.D])
+                self.attributes_dropout = sparse_dropout(self.attributes, 1-self.dropout, (int(self.attributes.values.get_shape()[0]),))
             else:
                 self.attributes = tf.Variable(attribute_matrix, dtype=tf.float32)
+                self.attributes_dropout = tf.nn.dropout(self.attributes, rate=dropout)
+            
+            self.attrs_comp = tf.cond(self.training,
+                                  lambda: self.attributes_dropout,
+                                  lambda: self.attributes) if self.dropout > 0. else self.attributes
 
             w_init = slim.xavier_initializer
             self.weights = []
@@ -738,6 +773,7 @@ class GCNSparse:
                 self.weights.append(weight)
                 self.biases.append(bias)
                 previous_size = layer_size
+                
             weight_final = tf.get_variable(f"W_{len(hidden_sizes) + 1}", shape=[previous_size, self.K],
                                            dtype=tf.float32,
                                            initializer=w_init())
@@ -765,7 +801,7 @@ class GCNSparse:
             self.train_op = None
             self.initializer = None
 
-    def build(self, with_relu=True, learning_rate=1e-2):
+    def build(self, with_relu=True):
         with self.graph.as_default():
             hidden = self.attributes
             for ix in range(len(self.hidden_sizes)):
@@ -773,18 +809,27 @@ class GCNSparse:
                 b = self.biases[ix]
                 if ix == 0 and self.sparse_attributes:
                     hidden = tf.sparse_tensor_dense_matmul(self.adj_norm,
-                                                           tf.sparse_tensor_dense_matmul(self.attributes, w)) + b
+                                                           tf.sparse_tensor_dense_matmul(self.attrs_comp, w)) + b
                 else:
-                    hidden = tf.sparse_tensor_dense_matmul(self.adj_norm, self.attributes @ w) + b
+                    hidden = tf.sparse_tensor_dense_matmul(self.adj_norm, self.attrs_comp @ w) + b
 
                 if with_relu:
                     hidden = tf.nn.relu(hidden)
+                
+                hidden_dropout = tf.nn.dropout(hidden, rate=self.dropout)
+                hidden = tf.cond(self.training,
+                                   lambda: hidden_dropout,
+                                   lambda: hidden) if self.dropout > 0. else hidden
+
 
             self.logits = tf.sparse_tensor_dense_matmul(self.adj_norm, hidden @ self.weights[-1]) + self.biases[-1]
             self.logits_gather = tf.gather(self.logits, self.idx)
             labels_gather = tf.gather(self.labels_onehot, self.idx)
+            
             self.loss = tf.nn.softmax_cross_entropy_with_logits_v2(labels=labels_gather, logits=self.logits_gather)
-            self.optimizer = tf.train.AdamOptimizer(learning_rate=learning_rate)
+            self.loss += self.weight_decay * tf.add_n([tf.nn.l2_loss(v) for v in [self.weights[0], self.biases[0]]])
+            
+            self.optimizer = tf.train.AdamOptimizer(learning_rate=self.learning_rate)
             self.train_op = self.optimizer.minimize(self.loss, var_list=[*self.weights, *self.biases])
             self.initializer = tf.local_variables_initializer()
 
@@ -798,4 +843,4 @@ class GCNSparse:
                 _iter = tqdm(_iter, desc="Training")
 
             for _it in _iter:
-                self.session.run(self.train_op, feed_dict={self.idx: idx_train})
+                self.session.run(self.train_op, feed_dict={self.idx: idx_train, self.training: True})
