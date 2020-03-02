@@ -342,20 +342,20 @@ class GNNMetaApprox(GNNAttack):
 
             logits_labeled = tf.gather(self.logits, self.idx_labeled)
             labels_train = tf.gather(self.labels_onehot, self.idx_labeled)
-            logits_unlabeled = tf.gather(self.logits, self.idx_unlabeled)
-            labels_selftrain = tf.gather(self.labels_onehot, self.idx_unlabeled)
+            logits_attack = tf.gather(self.logits, self.idx_unlabeled)
+            labels_attack = tf.gather(self.labels_onehot, self.idx_attack)
 
             loss_labeled = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits_v2(logits=logits_labeled,
                                                                                      labels=labels_train))
-            loss_unlabeled = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits_v2(logits=logits_unlabeled,
-                                                                                       labels=labels_selftrain))
+            loss_attack = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits_v2(logits=logits_attack,
+                                                                                       labels=labels_attack))
 
             if self.lambda_ == 1:
                 attack_loss = loss_labeled
             elif self.lambda_ == 0:
-                attack_loss = loss_unlabeled
+                attack_loss = loss_attack
             else:
-                attack_loss = self.lambda_ * loss_labeled + (1 - self.lambda_) * loss_unlabeled
+                attack_loss = self.lambda_ * loss_labeled + (1 - self.lambda_) * loss_attack
 
             # This variable "stores" the gradients of every inner training step.
             self.grad_sum = tf.Variable(np.zeros(self.N * self.N), dtype=self.dtype)
