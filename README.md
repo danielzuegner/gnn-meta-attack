@@ -1,7 +1,7 @@
 # Adversarial Attacks on Graph Neural Networks via Meta Learning
 
 <p align="center">
-<img src="https://www.kdd.in.tum.de/fileadmin/w00bxq/www/gnn-meta-attack/figure.png" width="400">
+<img src="https://www.in.tum.de/fileadmin/w00bws/daml/gnn-meta-attack/figure3.png" width="400">
 </p>
 
 Implementation of the paper:   
