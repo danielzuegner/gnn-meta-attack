@@ -227,7 +227,7 @@ def compute_log_likelihood(n, alpha, sum_log_degrees, d_min):
         The log likelihood of the given observed Powerlaw distribution and exponend alpha.
 
     """
-    return n * tf.log(alpha) + n * alpha * tf.log(d_min) + (alpha + 1) * sum_log_degrees
+    return n * tf.log(alpha) + n * alpha * tf.log(d_min) - (alpha + 1) * sum_log_degrees
 
 
 def update_sum_log_degrees(sum_log_degrees_before, n_old, d_old, d_new, d_min):
